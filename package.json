@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.7.0",
   "description": "企业微信智能机器人回调到 DeepSeek 的最小可运行服务",
   "scripts": {
     "start": "node src/server.js",
