@@ -1,0 +1,19 @@
+{
+  "name": "wecom-deepseek-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "企业微信智能机器人回调到 DeepSeek 的最小可运行服务",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18.18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}
