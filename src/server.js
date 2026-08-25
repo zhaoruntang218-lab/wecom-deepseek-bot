@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import { askCodex } from "./codex.js";
 import { askDeepSeek } from "./deepseek.js";
 import {
   calculateSignature,
@@ -16,6 +17,11 @@ const config = {
   deepseekKey: process.env.DEEPSEEK_API_KEY || "",
   deepseekBaseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
   deepseekModel: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+  codexKey: process.env.CODEX_API_KEY || "",
+  codexBaseUrl: process.env.CODEX_BASE_URL || "https://www.speedyapi.best/v1",
+  codexModel: process.env.CODEX_MODEL || "gpt-5.6-terra",
+  codexReasoningEffort: process.env.CODEX_REASONING_EFFORT || "xhigh",
+  defaultProvider: process.env.BOT_DEFAULT_PROVIDER || "deepseek",
   systemPrompt:
     process.env.BOT_SYSTEM_PROMPT ||
     "你是微信群里的智能助手。回答简洁、准确、友善；不知道时明确说明。",
@@ -69,6 +75,12 @@ function textFromMessage(message) {
   return String(message.text?.content || "").trim();
 }
 
+function selectProvider(question) {
+  const match = question.match(/^(?:\/codex|codex:)\s*/i);
+  if (match) return { provider: "codex", question: question.slice(match[0].length).trim() };
+  return { provider: config.defaultProvider === "codex" ? "codex" : "deepseek", question };
+}
+
 function conversationKey(message) {
   return String(message.chatid || message.from?.userid || "default");
 }
@@ -112,19 +124,32 @@ async function handleMessage(message) {
     if (processedMessageIds.size > 2000) processedMessageIds.delete(processedMessageIds.values().next().value);
   }
 
-  const question = textFromMessage(message);
-  if (!question || !message.response_url) return;
+  const originalQuestion = textFromMessage(message);
+  if (!originalQuestion || !message.response_url) return;
+  const { provider, question } = selectProvider(originalQuestion);
+  if (!question) return;
 
   const key = conversationKey(message);
   try {
-    const answer = await askDeepSeek({
-      apiKey: config.deepseekKey,
-      baseUrl: config.deepseekBaseUrl,
-      model: config.deepseekModel,
-      systemPrompt: config.systemPrompt,
-      history: conversations.get(key) || [],
-      question,
-    });
+    const history = conversations.get(key) || [];
+    const answer = provider === "codex"
+      ? await askCodex({
+          apiKey: config.codexKey,
+          baseUrl: config.codexBaseUrl,
+          model: config.codexModel,
+          reasoningEffort: config.codexReasoningEffort,
+          systemPrompt: config.systemPrompt,
+          history,
+          question,
+        })
+      : await askDeepSeek({
+          apiKey: config.deepseekKey,
+          baseUrl: config.deepseekBaseUrl,
+          model: config.deepseekModel,
+          systemPrompt: config.systemPrompt,
+          history,
+          question,
+        });
     appendHistory(key, question, answer);
     await sendReply(message.response_url, answer);
   } catch (error) {
