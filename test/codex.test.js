@@ -49,3 +49,30 @@ test("Codex client reports provider errors", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("Codex client preserves multimodal user content", async () => {
+  const originalFetch = globalThis.fetch;
+  let body;
+  globalThis.fetch = async (_url, options) => {
+    body = JSON.parse(options.body);
+    return new Response(JSON.stringify({ choices: [{ message: { content: "image answer" } }] }), { status: 200 });
+  };
+  try {
+    const userContent = [
+      { type: "text", text: "请描述图片" },
+      { type: "image_url", image_url: { url: "data:image/png;base64,AA==" } },
+    ];
+    const answer = await askCodex({
+      apiKey: "test-key",
+      baseUrl: "https://example.test/v1",
+      history: [],
+      systemPrompt: "system",
+      question: "请描述图片",
+      userContent,
+    });
+    assert.equal(answer, "image answer");
+    assert.deepEqual(body.messages.at(-1).content, userContent);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

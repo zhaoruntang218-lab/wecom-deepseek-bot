@@ -1,13 +1,24 @@
 import "dotenv/config";
 import express from "express";
-import { askCodex } from "./codex.js";
+import { askCodex, transcribeAudio } from "./codex.js";
+import {
+  createMessageContent,
+  messageType,
+  replaceContentPrompt,
+  UserMessageError,
+} from "./message-content.js";
 import { selectProvider } from "./routing.js";
 import {
-  calculateSignature,
   createEncryptedReply,
   decryptMessage,
   verifySignature,
 } from "./wecom-crypto.js";
+import { createWeComMediaClient } from "./wecom-media.js";
+
+function positiveEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
 
 const config = {
   port: Number(process.env.PORT || 3000),
@@ -18,6 +29,14 @@ const config = {
   codexBaseUrl: process.env.CODEX_BASE_URL || "https://www.speedyapi.best/v1",
   codexModel: process.env.CODEX_MODEL || "gpt-5.6-terra",
   codexReasoningEffort: process.env.CODEX_REASONING_EFFORT || "xhigh",
+  codexTimeoutMs: positiveEnv("CODEX_TIMEOUT_MS", 120_000),
+  codexTranscriptionModel: process.env.CODEX_TRANSCRIPTION_MODEL || "",
+  codexFilePartType: process.env.CODEX_FILE_PART_TYPE || "file",
+  wecomCorpId: process.env.WECOM_CORP_ID || "",
+  wecomCorpSecret: process.env.WECOM_CORP_SECRET || "",
+  maxMediaBytes: positiveEnv("MAX_MEDIA_BYTES", 10 * 1024 * 1024),
+  mediaFetchTimeoutMs: positiveEnv("MEDIA_FETCH_TIMEOUT_MS", 30_000),
+  maxFileTextChars: positiveEnv("MAX_FILE_TEXT_CHARS", 60_000),
   systemPrompt:
     process.env.BOT_SYSTEM_PROMPT ||
     "你是微信群里的智能助手。回答简洁、准确、友善；不知道时明确说明。",
@@ -36,6 +55,12 @@ const app = express();
 const conversations = new Map();
 const processedMessageIds = new Set();
 const rawBody = express.raw({ type: "*/*", limit: "1mb" });
+const mediaClient = createWeComMediaClient({
+  corpId: config.wecomCorpId,
+  corpSecret: config.wecomCorpSecret,
+  maxBytes: config.maxMediaBytes,
+  timeoutMs: config.mediaFetchTimeoutMs,
+});
 
 function queryParams(request) {
   return {
@@ -66,11 +91,6 @@ function parseIncomingMessage(plainText) {
   }
 }
 
-function textFromMessage(message) {
-  if (message?.msgtype !== "text") return "";
-  return String(message.text?.content || "").trim();
-}
-
 function conversationKey(message) {
   return String(message.chatid || message.from?.userid || "default");
 }
@@ -99,11 +119,33 @@ async function sendReply(responseUrl, content) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       msgtype: "markdown",
-      markdown: { content: content.slice(0, 4000) },
+      markdown: { content: String(content || "").slice(0, 4000) },
     }),
   });
   const body = await response.text();
   if (!response.ok) throw new Error(`WeCom response_url failed: HTTP ${response.status} ${body.slice(0, 200)}`);
+}
+
+function publicProcessingError(error, kind) {
+  if (error instanceof UserMessageError) {
+    if (error.code === "MEDIA_CREDENTIALS_MISSING") {
+      return "已收到媒体，但服务器还没有配置企业微信媒体下载权限。请管理员在 Railway 添加 WECOM_CORP_ID 和 WECOM_CORP_SECRET。";
+    }
+    if (error.code === "MEDIA_TOO_LARGE") {
+      return "这个媒体文件超过服务器大小限制，请压缩后再发送。";
+    }
+    if (error.code === "VOICE_TRANSCRIPTION_UNAVAILABLE" || error.code === "VOICE_TRANSCRIPTION_FAILED") {
+      return "语音没有得到可用的文字转写，请开启企业微信语音识别，或检查 CODEX_TRANSCRIPTION_MODEL 配置。";
+    }
+    return error.message;
+  }
+  if (kind === "file") {
+    return "附件已收到，但当前 Codex 兼容接口没有接受这种文件输入格式。请确认 CODEX_FILE_PART_TYPE 与接口文档一致，或先发送 PDF/Word 的文字内容。";
+  }
+  if (kind === "image") {
+    return "图片已收到，但当前 Codex 兼容接口没有接受图片输入。请确认该模型和接口已启用视觉能力。";
+  }
+  return "抱歉，我暂时无法回答这个问题，请稍后再试。";
 }
 
 async function handleMessage(message) {
@@ -114,19 +156,41 @@ async function handleMessage(message) {
     if (processedMessageIds.size > 2000) processedMessageIds.delete(processedMessageIds.values().next().value);
   }
 
-  const originalQuestion = textFromMessage(message);
+  const type = messageType(message);
+  const responseUrl = message.response_url || message.responseUrl;
   console.log("WeCom message received", JSON.stringify({
-    msgtype: message?.msgtype || "",
-    hasResponseUrl: Boolean(message?.response_url),
-    textLength: originalQuestion.length,
+    msgtype: type,
+    hasResponseUrl: Boolean(responseUrl),
+    hasMediaId: Boolean(message?.image?.media_id || message?.file?.media_id || message?.voice?.media_id),
   }));
-  if (!originalQuestion || !message.response_url) return;
-  const { provider, question } = selectProvider(originalQuestion);
-  console.log("Message routed", JSON.stringify({ provider, questionLength: question.length }));
-  if (!question) return;
+  if (!responseUrl) return;
 
+  let input;
   const key = conversationKey(message);
   try {
+    input = await createMessageContent(message, {
+      mediaClient,
+      maxMediaBytes: config.maxMediaBytes,
+      maxFileTextChars: config.maxFileTextChars,
+      filePartType: config.codexFilePartType,
+      transcribeAudio: config.codexTranscriptionModel
+        ? ({ bytes, filename, mimeType }) => transcribeAudio({
+          apiKey: config.codexKey,
+          baseUrl: config.codexBaseUrl,
+          model: config.codexTranscriptionModel,
+          bytes,
+          filename,
+          mimeType,
+          timeoutMs: config.codexTimeoutMs,
+        })
+        : null,
+    });
+
+    const routed = selectProvider(input.question || input.defaultQuestion);
+    const question = routed.question || input.defaultQuestion || "";
+    console.log("Message routed", JSON.stringify({ provider: routed.provider, msgtype: input.kind, questionLength: question.length }));
+    if (!question) return;
+
     const history = conversations.get(key) || [];
     const answer = await askCodex({
       apiKey: config.codexKey,
@@ -136,13 +200,16 @@ async function handleMessage(message) {
       systemPrompt: config.systemPrompt,
       history,
       question,
+      userContent: replaceContentPrompt(input.userContent, question),
+      timeoutMs: config.codexTimeoutMs,
     });
-    appendHistory(key, question, answer);
-    await sendReply(message.response_url, answer);
+    const historyQuestion = input.historyLabel ? `[${input.historyLabel}] ${question}` : question;
+    appendHistory(key, historyQuestion, answer);
+    await sendReply(responseUrl, answer);
   } catch (error) {
     console.error("Message processing failed:", error.message);
     try {
-      await sendReply(message.response_url, "抱歉，我暂时无法回答这个问题，请稍后再试。");
+      await sendReply(responseUrl, publicProcessingError(error, input?.kind || type));
     } catch (replyError) {
       console.error("Fallback reply failed:", replyError.message);
     }
