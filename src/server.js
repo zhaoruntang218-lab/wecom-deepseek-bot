@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { askCodex } from "./codex.js";
 import { askDeepSeek } from "./deepseek.js";
+import { selectProvider } from "./routing.js";
 import {
   calculateSignature,
   createEncryptedReply,
@@ -73,12 +74,6 @@ function parseIncomingMessage(plainText) {
 function textFromMessage(message) {
   if (message?.msgtype !== "text") return "";
   return String(message.text?.content || "").trim();
-}
-
-function selectProvider(question) {
-  const match = question.match(/^(?:\/codex|codex:)\s*/i);
-  if (match) return { provider: "codex", question: question.slice(match[0].length).trim() };
-  return { provider: config.defaultProvider === "codex" ? "codex" : "deepseek", question };
 }
 
 function conversationKey(message) {
