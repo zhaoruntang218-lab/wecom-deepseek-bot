@@ -266,7 +266,9 @@ function decodeText(bytes, maxChars) {
 
 function imageContent(prompt, source) {
   const mimeType = normalizeMimeType(source.mimeType, "image/jpeg");
-  const url = source.bytes ? toDataUrl(source.bytes, mimeType) : source.url;
+  // Signed WeCom URLs are short-lived but are accepted by most OpenAI-compatible
+  // gateways and avoid inflating the JSON request with Base64 image bytes.
+  const url = source.url || (source.bytes ? toDataUrl(source.bytes, mimeType) : "");
   if (!url) throw new UserMessageError("图片内容为空", "IMAGE_CONTENT_MISSING");
   return [
     { type: "text", text: prompt },
@@ -326,7 +328,18 @@ async function createSingleMessageContent(message, options) {
 
   if (type === "image") {
     const descriptor = descriptorFor(message);
-    const source = await resolveMedia(descriptor, { mediaClient: options.mediaClient, maxBytes });
+    let source;
+    if (descriptor.url) {
+      try {
+        const parsed = new URL(descriptor.url);
+        if (parsed.protocol !== "https:") throw new Error("invalid protocol");
+        source = { url: parsed.toString(), mimeType: descriptor.mimeType || "image/jpeg", filename: descriptor.filename };
+      } catch {
+        throw new UserMessageError("图片地址无效", "MEDIA_URL_INVALID");
+      }
+    } else {
+      source = await resolveMedia(descriptor, { mediaClient: options.mediaClient, maxBytes });
+    }
     const question = captionFromMessage(message);
     const prompt = question || defaultPrompt(type);
     const mimeType = descriptor.mimeType.startsWith("image/")

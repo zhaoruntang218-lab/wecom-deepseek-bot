@@ -162,6 +162,8 @@ async function handleMessage(message) {
     msgtype: type,
     hasResponseUrl: Boolean(responseUrl),
     hasMediaId: Boolean(message?.image?.media_id || message?.file?.media_id || message?.voice?.media_id),
+    hasImageUrl: Boolean(message?.image?.url),
+    mixedItemCount: Array.isArray(message?.mixed?.msg_item) ? message.mixed.msg_item.length : 0,
   }));
   if (!responseUrl) return;
 
