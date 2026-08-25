@@ -329,17 +329,10 @@ async function createSingleMessageContent(message, options) {
   if (type === "image") {
     const descriptor = descriptorFor(message);
     let source;
-    if (descriptor.url) {
-      try {
-        const parsed = new URL(descriptor.url);
-        if (parsed.protocol !== "https:") throw new Error("invalid protocol");
-        source = { url: parsed.toString(), mimeType: descriptor.mimeType || "image/jpeg", filename: descriptor.filename };
-      } catch {
-        throw new UserMessageError("图片地址无效", "MEDIA_URL_INVALID");
-      }
-    } else {
-      source = await resolveMedia(descriptor, { mediaClient: options.mediaClient, maxBytes });
-    }
+    // Download WeCom's short-lived signed URL on Railway first. Some
+    // OpenAI-compatible gateways cannot reach Tencent's media hosts, while
+    // the same image is accepted reliably as a Base64 data URL.
+    source = await resolveMedia(descriptor, { mediaClient: options.mediaClient, maxBytes });
     const question = captionFromMessage(message);
     const prompt = question || defaultPrompt(type);
     const mimeType = descriptor.mimeType.startsWith("image/")

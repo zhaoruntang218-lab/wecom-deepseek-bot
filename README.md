@@ -42,7 +42,7 @@ https://你的Railway域名/wechat/callback
 
 服务支持企业微信智能机器人回调中的 `image`、`file` 和 `voice` 消息：
 
-- 图片会转换为 OpenAI 兼容的 `image_url` 内容块。企业微信智能机器人通常会传带签名的临时 `url`，服务会先下载后再发送给 Codex；如果你的回调版本只传 `media_id`，再配置 `WECOM_CORP_ID` 和 `WECOM_CORP_SECRET`。
+- 图片会转换为 OpenAI 兼容的 `image_url` 内容块。企业微信智能机器人传来的临时图片 URL 会先由 Railway 下载，再以内嵌 Base64 发送给 Codex，避免兼容接口无法访问腾讯图片地址；如果你的回调版本只传 `media_id`，再配置 `WECOM_CORP_ID` 和 `WECOM_CORP_SECRET`。
 - `txt`、`md`、`csv`、`json`、`xml`、代码等文本附件会在服务端提取文字。PDF、Word、压缩包等二进制附件会按 `CODEX_FILE_PART_TYPE` 发送，前提是你的兼容接口支持对应格式。
 - 语音优先使用企业微信提供的 `voice.content`（部分回调版本使用 `recognition`）。没有识别文本时，只有配置 `CODEX_TRANSCRIPTION_MODEL` 才会调用 `/audio/transcriptions`。
 - 媒体默认限制为 10 MB，下载超时为 30 秒；可用 `MAX_MEDIA_BYTES` 和 `MEDIA_FETCH_TIMEOUT_MS` 调整。企业微信的 `response_url` 每条回调只能调用一次，因此服务会等待媒体处理后只发送一次最终结果，避免“处理中”提示占用回复机会。

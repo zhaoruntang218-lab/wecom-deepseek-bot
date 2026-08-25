@@ -158,12 +158,17 @@ async function handleMessage(message) {
 
   const type = messageType(message);
   const responseUrl = message.response_url || message.responseUrl;
+  const mixedItems = Array.isArray(message?.mixed?.msg_item)
+    ? message.mixed.msg_item
+    : Array.isArray(message?.mixed?.items)
+      ? message.mixed.items
+      : [];
   console.log("WeCom message received", JSON.stringify({
     msgtype: type,
     hasResponseUrl: Boolean(responseUrl),
     hasMediaId: Boolean(message?.image?.media_id || message?.file?.media_id || message?.voice?.media_id),
-    hasImageUrl: Boolean(message?.image?.url),
-    mixedItemCount: Array.isArray(message?.mixed?.msg_item) ? message.mixed.msg_item.length : 0,
+    hasImageUrl: Boolean(message?.image?.url) || mixedItems.some((item) => Boolean(item?.image?.url || item?.url)),
+    mixedItemCount: mixedItems.length,
   }));
   if (!responseUrl) return;
 

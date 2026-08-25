@@ -15,7 +15,7 @@ test("image messages become an OpenAI-compatible image content part", async () =
   assert.match(content.userContent[1].image_url.url, /^data:image\/png;base64,/);
 });
 
-test("WeCom signed image URLs are passed through without corp credentials", async () => {
+test("WeCom signed image URLs are downloaded and embedded without corp credentials", async () => {
   const content = await createMessageContent({
     msgtype: "image",
     image: { url: "https://media.example.test/signed-image" },
@@ -29,7 +29,7 @@ test("WeCom signed image URLs are passed through without corp credentials", asyn
     },
   });
 
-  assert.equal(content.userContent[1].image_url.url, "https://media.example.test/signed-image");
+  assert.match(content.userContent[1].image_url.url, /^data:image\/jpeg;base64,/);
 });
 
 test("mixed group messages keep the text prompt and image URL together", async () => {
@@ -41,13 +41,21 @@ test("mixed group messages keep the text prompt and image URL together", async (
         { msgtype: "image", image: { url: "https://media.example.test/group-image" } },
       ],
     },
+  }, {
+    mediaClient: {
+      fetchUrl: async () => ({
+        bytes: Buffer.from("group-image"),
+        mimeType: "image/jpeg",
+        filename: "image.jpg",
+      }),
+    },
   });
 
   assert.equal(content.kind, "mixed");
   assert.equal(content.question, "@AI 这张图是什么");
   assert.equal(content.userContent[0].type, "text");
   assert.equal(content.userContent[1].type, "image_url");
-  assert.equal(content.userContent[1].image_url.url, "https://media.example.test/group-image");
+  assert.match(content.userContent[1].image_url.url, /^data:image\/jpeg;base64,/);
 });
 
 test("text attachments are extracted before the Codex request", async () => {
