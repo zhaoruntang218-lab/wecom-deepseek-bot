@@ -10,6 +10,19 @@ test("leading WeCom mentions are removed before routing", () => {
   });
 });
 
+test("codex command accepts common spellings", () => {
+  for (const input of ["@AI codex 你好", "@AI /codex 你好", "@AI codex: 你好", "@AI / codex：你好"]) {
+    assert.deepEqual(selectProvider(input), { provider: "codex", question: "你好" });
+  }
+});
+
+test("deepseek command can explicitly select the default provider", () => {
+  assert.deepEqual(selectProvider("@AI deepseek 你好"), {
+    provider: "deepseek",
+    question: "你好",
+  });
+});
+
 test("ordinary mentioned questions still use DeepSeek by default", () => {
   assert.deepEqual(selectProvider("@AI 你现在支持什么", "deepseek"), {
     provider: "deepseek",

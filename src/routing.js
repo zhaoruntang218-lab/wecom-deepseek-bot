@@ -7,8 +7,16 @@ export function stripLeadingMentions(value) {
 
 export function selectProvider(value, defaultProvider = "deepseek") {
   const question = stripLeadingMentions(value);
-  const match = question.match(/^(?:\/codex|codex:)\s*/i);
-  if (match) return { provider: "codex", question: question.slice(match[0].length).trim() };
+  const codexMatch = question.match(/^(?:\/\s*)?codex(?:(?:\s*[:：])|\s+|$)\s*/i);
+  if (codexMatch) {
+    return { provider: "codex", question: question.slice(codexMatch[0].length).trim() };
+  }
+
+  const deepSeekMatch = question.match(/^(?:\/\s*)?deepseek(?:(?:\s*[:：])|\s+|$)\s*/i);
+  if (deepSeekMatch) {
+    return { provider: "deepseek", question: question.slice(deepSeekMatch[0].length).trim() };
+  }
+
   return {
     provider: defaultProvider === "codex" ? "codex" : "deepseek",
     question,
