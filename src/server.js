@@ -182,7 +182,16 @@ app.get("/wechat/callback", (request, response) => {
 app.post("/wechat/callback", rawBody, (request, response) => {
   const params = queryParams(request);
   const encrypted = extractEncryptedBody(request.body);
-  if (!encrypted || !verifySignature(config.token, params.timestamp, params.nonce, encrypted, params.msgSignature)) {
+  const validSignature = Boolean(
+    encrypted && verifySignature(config.token, params.timestamp, params.nonce, encrypted, params.msgSignature),
+  );
+  console.log("WeCom callback received", JSON.stringify({
+    hasEncryptedBody: Boolean(encrypted),
+    hasSignature: Boolean(params.msgSignature),
+    validSignature,
+  }));
+  if (!validSignature) {
+    console.error("WeCom callback rejected");
     return response.status(401).send("invalid signature");
   }
 
