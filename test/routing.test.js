@@ -16,16 +16,9 @@ test("codex command accepts common spellings", () => {
   }
 });
 
-test("deepseek command can explicitly select the default provider", () => {
-  assert.deepEqual(selectProvider("@AI deepseek 你好"), {
-    provider: "deepseek",
-    question: "你好",
-  });
-});
-
-test("ordinary mentioned questions still use DeepSeek by default", () => {
-  assert.deepEqual(selectProvider("@AI 你现在支持什么", "deepseek"), {
-    provider: "deepseek",
+test("ordinary mentioned questions use Codex by default", () => {
+  assert.deepEqual(selectProvider("@AI 你现在支持什么"), {
+    provider: "codex",
     question: "你现在支持什么",
   });
 });

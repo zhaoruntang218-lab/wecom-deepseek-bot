@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import { askCodex } from "./codex.js";
-import { askDeepSeek } from "./deepseek.js";
 import { selectProvider } from "./routing.js";
 import {
   calculateSignature,
@@ -15,14 +14,10 @@ const config = {
   token: process.env.WECOM_TOKEN || "",
   encodingAESKey: process.env.WECOM_ENCODING_AES_KEY || "",
   receiveId: process.env.WECOM_RECEIVE_ID || "",
-  deepseekKey: process.env.DEEPSEEK_API_KEY || "",
-  deepseekBaseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
-  deepseekModel: process.env.DEEPSEEK_MODEL || "deepseek-chat",
   codexKey: process.env.CODEX_API_KEY || "",
   codexBaseUrl: process.env.CODEX_BASE_URL || "https://www.speedyapi.best/v1",
   codexModel: process.env.CODEX_MODEL || "gpt-5.6-terra",
   codexReasoningEffort: process.env.CODEX_REASONING_EFFORT || "xhigh",
-  defaultProvider: process.env.BOT_DEFAULT_PROVIDER || "deepseek",
   systemPrompt:
     process.env.BOT_SYSTEM_PROMPT ||
     "你是微信群里的智能助手。回答简洁、准确、友善；不知道时明确说明。",
@@ -32,7 +27,7 @@ const config = {
 for (const [name, value] of [
   ["WECOM_TOKEN", config.token],
   ["WECOM_ENCODING_AES_KEY", config.encodingAESKey],
-  ["DEEPSEEK_API_KEY", config.deepseekKey],
+  ["CODEX_API_KEY", config.codexKey],
 ]) {
   if (!value) throw new Error(`${name} is required; copy .env.example to .env and fill it in`);
 }
@@ -133,24 +128,15 @@ async function handleMessage(message) {
   const key = conversationKey(message);
   try {
     const history = conversations.get(key) || [];
-    const answer = provider === "codex"
-      ? await askCodex({
-          apiKey: config.codexKey,
-          baseUrl: config.codexBaseUrl,
-          model: config.codexModel,
-          reasoningEffort: config.codexReasoningEffort,
-          systemPrompt: config.systemPrompt,
-          history,
-          question,
-        })
-      : await askDeepSeek({
-          apiKey: config.deepseekKey,
-          baseUrl: config.deepseekBaseUrl,
-          model: config.deepseekModel,
-          systemPrompt: config.systemPrompt,
-          history,
-          question,
-        });
+    const answer = await askCodex({
+      apiKey: config.codexKey,
+      baseUrl: config.codexBaseUrl,
+      model: config.codexModel,
+      reasoningEffort: config.codexReasoningEffort,
+      systemPrompt: config.systemPrompt,
+      history,
+      question,
+    });
     appendHistory(key, question, answer);
     await sendReply(message.response_url, answer);
   } catch (error) {
@@ -203,12 +189,12 @@ app.post("/wechat/callback", rawBody, (request, response) => {
     return response.status(400).send("invalid callback");
   }
 
-  // 企业微信要求尽快确认收到；DeepSeek 请求在响应之后异步执行。
+  // 企业微信要求尽快确认收到；Codex 请求在响应之后异步执行。
   response.json(createEncryptedReply(config.token, config.encodingAESKey, "success", config.receiveId));
   void handleMessage(message);
 });
 
 app.listen(config.port, "0.0.0.0", () => {
-  console.log(`WeCom/DeepSeek bot listening on 0.0.0.0:${config.port}`);
+  console.log(`WeCom/Codex bot listening on 0.0.0.0:${config.port}`);
   console.log("Configure the public callback URL as https://your-domain/wechat/callback");
 });

@@ -1,10 +1,10 @@
 {
-  "name": "wecom-deepseek-bot",
+  "name": "wecom-codex-bot",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.7.0",
-  "description": "企业微信智能机器人回调到 DeepSeek 和 Codex 兼容 API 的服务",
+  "description": "企业微信智能机器人回调到 Codex 兼容 API 的服务",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
