@@ -120,8 +120,14 @@ async function handleMessage(message) {
   }
 
   const originalQuestion = textFromMessage(message);
+  console.log("WeCom message received", JSON.stringify({
+    msgtype: message?.msgtype || "",
+    hasResponseUrl: Boolean(message?.response_url),
+    textLength: originalQuestion.length,
+  }));
   if (!originalQuestion || !message.response_url) return;
   const { provider, question } = selectProvider(originalQuestion);
+  console.log("Message routed", JSON.stringify({ provider, questionLength: question.length }));
   if (!question) return;
 
   const key = conversationKey(message);
@@ -193,7 +199,7 @@ app.post("/wechat/callback", rawBody, (request, response) => {
   void handleMessage(message);
 });
 
-app.listen(config.port, () => {
-  console.log(`WeCom/DeepSeek bot listening on http://127.0.0.1:${config.port}`);
+app.listen(config.port, "0.0.0.0", () => {
+  console.log(`WeCom/DeepSeek bot listening on 0.0.0.0:${config.port}`);
   console.log("Configure the public callback URL as https://your-domain/wechat/callback");
 });
