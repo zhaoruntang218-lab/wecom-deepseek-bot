@@ -81,3 +81,6 @@ docker build -t wecom-codex-bot .
 Railway 会在部署完成后提供 HTTPS 域名。修改 Variables 后需要点击 Deploy，等待服务显示 `Active` 和 `Deployment successful`。
 
 企业微信回调收到消息后，服务会先快速确认，再异步调用 Codex，避免企业微信超时重试。会话历史仅保存在内存中，服务重启后清空。
+
+
+<!-- Railway branch sync -->
